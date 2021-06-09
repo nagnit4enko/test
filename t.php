@@ -72,7 +72,7 @@ class Orders extends \App\Core\Controller {
       $content = $this->template->ui->panel($result);
     } else {
       
-      $this->template->wrap->addStatic('AdminOrders.js');
+      \App::addStatic('AdminOrders.js');
 
       $operator_info = $this->operator->getOperatorDayInfo(isset($input['day_id']) ? $input['day_id'] : $day_id);
 
@@ -149,7 +149,7 @@ class Orders extends \App\Core\Controller {
     //$where['orders.date_create<='] = $operator_info['date_end'];
     $where['orders.date_create>='] = mktime(0, 0, 0, $m, $d, $y);;
     $where['orders.date_create<='] = mktime(23, 59, 59, $m, $d, $y);;
-    $where['orders.flags&!'] = \App\Helpers\OrderHelper::ORDER_CANCELED_MASK ;
+    $where['orders.flags&'] = \App\Helpers\OrderHelper::ORDER_ONDELIVERY_MASK | \App\Helpers\OrderHelper::ORDER_PAYED_MASK | \App\Helpers\OrderHelper::ORDER_PICKUP_MASK;
 
     // получаем все заказы за определённый день
     $result = $this->helper->getOrderList([
@@ -228,7 +228,6 @@ class Orders extends \App\Core\Controller {
             'delivery_sum'      => 0, // сумма заказа
             'delivery_paid'     => 0, // есть ли платные доставки
             'delivery_discount' => 0, // скидка в заказе
-            'delivery_paid_cnt' => 0, // количество платных доставок
             'payment_type'      => []
           ];
       }
@@ -253,10 +252,10 @@ class Orders extends \App\Core\Controller {
       $delivery_info[$deliveryman_id]['payment_type'][$method] += $value['order_sum'];
     }
 
-   
+
     $content = $this->Template->printPage($delivery_info, $item_info, $payment_types, $order_sum_on_day, $operators_info, $order_new_info, count($order_new_info));
-    $this->template->wrap->addStatic('print.css');
-    $this->template->wrap->addStatic('admin/css/print-order.css');
+    \App::addStatic('print.css');
+    \App::addStatic('admin/css/print-order.css');
     $this->template->wrap->page('', '', $content, '');
   }
 
@@ -290,7 +289,7 @@ class Orders extends \App\Core\Controller {
       $this->redirect('/admin/orders/');
     }
 
-    $this->template->wrap->addStatic('AdminOrders.js');
+    \App::addStatic('AdminOrders.js');
 
     // Статусы заказа
     $status_mask = $this->helper->checkFlags($result['flags']);
@@ -313,7 +312,7 @@ class Orders extends \App\Core\Controller {
     $dropDown = $this->Template->select([
       'id' => '%d',
       'list' => $this->operator->getDeliveryMens()
-    ], $result['deliveryman']['user_id']);
+    ], $row['deliveryman']['user_id']);
 
     //if ($this->userHelper->checkFlags(ADMIN_MASK | MODER_MASK)) {
       $cancel_button = '<button class="cancel-order btn btn-danger btn-sm" data-toggle="modal" data-target="#confirm">Отменить заказ</button>';
@@ -371,7 +370,7 @@ class Orders extends \App\Core\Controller {
       ]))[0];
     }
     
-    $this->template->wrap->addStatic(
+    \App::addStatic(
       "https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.css",
       'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js',
       "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment-with-locales.min.js",
@@ -385,7 +384,7 @@ class Orders extends \App\Core\Controller {
 
     $options = '';
     foreach ($this->config['pay_type'] as $key => $value) {
-      $options .= '<option '.($result['payment_type'] == $key || $this->config['pay_default'] == $key ? 'selected' : '').' value="'.$key.'">'.$value.'</option>';
+      $options .= '<option '.($this->config['pay_default'] == $key ? 'selected' : '').' value="'.$key.'">'.$value.'</option>';
     }
 
     $order_detail = $this->Template->getOrderDetailBlock($this->Template->buttonSaveOrder(), '','','','','', $options);
@@ -440,17 +439,16 @@ class Orders extends \App\Core\Controller {
 
     $_SESSION['last_post'] = time();
     $_SESSION['ip'] = $_SERVER['REMOTE_ADDR'];
-    
+
     if (!isset($input['items']) || empty($input['items'])) {
       $this->template->wrap->renderJSON([ERROR, 'Товары не были переданы']);
     }
     
-    //if (!isset($input['client_id']) || empty($input['client_id'])) {
+    if (!isset($input['client_id']) || empty($input['client_id'])) {
       if (!isset($input['client']) || empty($input['client'])) {
-        $input['client'] = '';
-        //$this->template->wrap->renderJSON([ERROR, 'Не переданы данные клиента']);
+        $this->template->wrap->renderJSON([ERROR, 'Не переданы данные клиента']);
       }
-    //}
+    }
     
     if (!isset($input['address_id']) || empty($input['address_id'])) {
       if (!isset($input['address']) || empty($input['address'])) {
@@ -462,16 +460,20 @@ class Orders extends \App\Core\Controller {
       $this->template->wrap->renderJSON([ERROR, 'Не указана сумма от клиента']);
     }
     */
-   /* if (!isset($input['date']) || empty($input['date'])) {
+    if (!isset($input['date']) || empty($input['date'])) {
       $this->template->wrap->renderJSON([ERROR, 'Не указано время доставки заказа']);
     }
     
     if (!isset($input['time']) || empty($input['time'])) {
       $this->template->wrap->renderJSON([ERROR, 'Не указано время доставки заказа']);
-    }*/
+    }
     
     if (!isset($input['order_pay_type']) || $input['order_pay_type'] > 4 || $input['order_pay_type'] < 0) {
       $this->template->wrap->renderJSON([ERROR, 'Неуказан тип платежа']);
+    }
+   
+    if (($delivery_date = strtotime($input['date'].' '.$input['time'])) === false || ($delivery_date + 600) < time()) {
+      $this->template->wrap->renderJSON([ERROR, 'Неправильная дата']);
     }
    
     $client_id = $input['client_id'];
@@ -497,7 +499,7 @@ class Orders extends \App\Core\Controller {
 
     // Добавляем телефон
     foreach ($input['phone'] as $phone) {
-      if (preg_match('/\+?\d{6,13}/i', $phone)) {
+      if (preg_match('/\+?\d{10,12}/i', $phone)) {
         $phones[] = $client->addPhone($client_id, $phone);
       } else {
         if (empty($phone) || mb_strlen($phone) > 6) {
@@ -505,10 +507,6 @@ class Orders extends \App\Core\Controller {
         }
         $phones[] = $phone;
       }
-    }
-
-    if (empty($phones)) {
-      $this->template->wrap->renderJSON([ERROR, 'Неуказан номер телефона']);
     }
 
     // Объеденяем телефоны
@@ -533,23 +531,14 @@ class Orders extends \App\Core\Controller {
       }
       $counts[$value]++;
     }
-
-    /*if (($delivery_date = strtotime($input['date'].' '.$input['time'])) === false || ($delivery_date + 600) < time()) {
-      $this->template->wrap->renderJSON([ERROR, 'Неправильная дата']);
-    }*/
-    $delivery_date = time();
+    
     $order_sum = $this->helper->getCurrentOrderSum($result, $counts);
-
-    if (Auth::id() == 1) {
-      // print_r($order_sum);
-      // print_r($counts);
-      // print_r($input['items']);
-      // die;
-    }
 
     if (isset($input['order_id'])) {
       $this->helper->table('orders')->where(['order_id' => $input['order_id']])->update([
         'item_ids' => implode(',', $input['items']), 
+        'date_create' => time(),
+        'delivery_date' => $delivery_date,
         'client_sum' => $input['client_sum'],
         'client_id' => $client_id,
         'phone_id' => $phones,
@@ -559,7 +548,8 @@ class Orders extends \App\Core\Controller {
         'descr' => $input['note_to_order'],
         'short' => $input['short'],
         'operator_id' => (int)Auth::id(),
-        'order_sum' => $order_sum
+        'order_sum' => $order_sum,
+        'host_id' => \App::_getDomainId()
       ]);
       $this->template->wrap->renderJSON([SUCCESS, 'id' => $input['order_id']]);
     }
@@ -577,7 +567,8 @@ class Orders extends \App\Core\Controller {
       'descr' => $input['note_to_order'],
       'short' => $input['short'],
       'operator_id' => (int)Auth::id(),
-      'order_sum' => $order_sum
+      'order_sum' => $order_sum,
+      'host_id' => \App::_getDomainId()
     ]);
     
     $this->template->wrap->renderJSON([SUCCESS, 'id' => $id]);
@@ -597,43 +588,13 @@ class Orders extends \App\Core\Controller {
       $this->template->wrap->renderJSON([ERROR, 'Переданный айди не является доставщиком']);
     }
 
-    $update = [
-      'deliveryman' => $input['delivery_id']
-    ];
-
-    $result = $this->helper->table('orders')->select('order_id,flags')->where(['order_id' => $input['order_id']])->get()[0];
-
-    // Если заказ отменён
-    if ($result['flags'] & \App\Helpers\OrderHelper::ORDER_CANCELED_MASK) {
-       $this->template->wrap->renderJSON([ERROR, 'На отменённый заказ нельзя установить доставщика']);
-    }
-
-    // Если у заказа стоит самовывоз убираем его
-    if ($result['flags'] & \App\Helpers\OrderHelper::ORDER_PICKUP_MASK) {
-       $update['flags-'] = \App\Helpers\OrderHelper::ORDER_PICKUP_MASK;
-    }
-
-    // Проверяем флаги, если доставщик не установлен
-    if (!($result['flags'] & \App\Helpers\OrderHelper::ORDER_ONDELIVERY_MASK)) {
-       $update['flags+'] = \App\Helpers\OrderHelper::ORDER_ONDELIVERY_MASK;
-    }
-
     // Добавляем курьера в доставки и обновляем статус
-    $this->helper->table('orders')->where(['order_id' => $input['order_id']])->update($update);
+    $this->helper->table('orders')->where(['order_id' => $input['order_id']])->update([
+      'deliveryman' => $input['delivery_id'],
+      'flags+' => \App\Helpers\OrderHelper::ORDER_ONDELIVERY_MASK,
+    ]);
 
     $this->template->wrap->renderJSON([SUCCESS, 'Доставщик успешно установлен']);
-  }
-
-  public function test($input){
-
-    $date_start = mktime(0, 0, 0, date('m'), date('d'), date('Y'));
-    $date_end   = strtotime('tomorrow');
-
-    // Получаем позицию счётчика
-    $order_fake_id = $this->helper->getOrderCount([
-      'delivery_date>=' => $date_start,
-      'order_id<=' => $input['order_id']
-    ]);
   }
 
   public function printPage($input){
@@ -642,7 +603,7 @@ class Orders extends \App\Core\Controller {
       exit;
     }
     
-    $this->template->wrap->addStatic('print.css');
+    \App::addStatic('print.css');
     
     $result = array_values($this->helper->getOrderList([
       'where' => ['order_id' => $input['order_id']],
@@ -650,9 +611,7 @@ class Orders extends \App\Core\Controller {
     ]))[0];
     
     $payment_method = $this->helper->getMethodPay($result['payment_type']);
-if(Auth::id() == 1) {
-  //print_r($result);
-}
+
     $date_start = mktime(0, 0, 0, date('m'), date('d'), date('Y'));
     $date_end   = strtotime('tomorrow');
 
