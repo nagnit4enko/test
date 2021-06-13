@@ -155,7 +155,7 @@ HTML;
         </div>
       </div>
       <div class="col-md-6 m-t">
-        <div class="form-group clearfix ">
+        <!--<div class="form-group clearfix ">
           <label class="text-left col-sm-12 input-group control-label">Дата и время доставки:</label>
           <div class="input-group col-sm-12">
             <div class="row">  
@@ -177,7 +177,7 @@ HTML;
               </div>
             </div>
           </div>
-        </div>
+        </div>-->
         <div class="form-group clearfix ">
           <label class="text-left col-sm-12 input-group control-label">Категория:</label>
           <div class="input-group col-sm-12">
@@ -260,7 +260,7 @@ HTML;
     }
 
     $class = '';
-    $address = $row['address']['address'];
+    $address = empty($row['address']) ? '' : $row['address']['address'];
     if (($row['flags'] & \App\Helpers\OrderHelper::ORDER_CANCELED_MASK)) {
       $class = 'cancelled';
       $dropdown = '-';
@@ -425,7 +425,11 @@ HTML;
 
     $button_print = '';
     if (!($result['flags'] & \App\Helpers\OrderHelper::ORDER_CANCELED_MASK)) {
-      $button_print = '<button style="margin-top: 4px;" onclick="AdminOrders.callPrint(\'/admin/orders/print/'.$result['order_id'].'/\');" class="btn  btn-primary btn-addon pull-right m-t-xs">
+      
+      $button_print = '<button style="margin-top: 4px;" onclick="location.href = \'/admin/orders/create/'.$result['order_id'].'/\';" class="btn btn-warning btn-addon pull-right m-t-xs">
+          <i class="fa fa-pencil pull-right"></i> 
+          Изменить заказ
+        </button><button style="margin-top: 4px;" onclick="AdminOrders.callPrint(\'/admin/orders/print/'.$result['order_id'].'/\');" class="btn btn-primary btn-addon pull-right m-r m-t-xs">
           <i class="fa fa-print pull-right"></i> 
           Распечатать заказ 
         </button>';
@@ -485,7 +489,7 @@ HTML;
         <button style="margin-top: 4px;" onclick="location.href='/admin/orders/create/'" class="btn  btn-info btn-addon pull-right m-t-xs m-r"><i class="fa fa-plus pull-right"></i> Добавить новый заказ </button>
 
         <h4 class="bold pull-left">
-          Заказ ID ({$result['order_id']}) | № {$result['order_id']}, создан {$date_create} {$top_status}
+          Заказ ID ({$result['order_id']}) | № {$result['order_id']}, создан {$date_create}
         </h4>
       </div>
     </div>
@@ -663,7 +667,7 @@ HTML;
     
     $phones = implode(', ', $result['phone_id']);
     ob_start();
-    include ROOT . '/App/Views/admin/print/yaposha.php';
+    include ROOT . '/App/Views/admin/print/tema.php';
     return ob_get_clean();
   }
 
