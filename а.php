@@ -94,22 +94,7 @@ class OrderHelper extends \App\Models\OrderModel {
     return $this->config['pay_type'][$method];
   }
 
-  function getCoordForAgents($address){
-  
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_URL, 'https://geocode-maps.yandex.ru/1.x/?apikey=6b7cdd92-fc43-4f96-9452-63bdc7525da9&format=json&geocode='.urlencode($address));
-    $data_coords_json = curl_exec($ch);
-
-    $data_coords = json_decode($data_coords_json, true);
-
-    if(!isset($data_coords['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos'])) {
-      return false;
-    }
-
-    return trim($data_coords['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']);
-  }
-
+ 
   public function getOrderList($opts){
     $default = [
       'where' => [],
@@ -150,7 +135,7 @@ class OrderHelper extends \App\Models\OrderModel {
     foreach ($result as &$row) {
       
       $row['client'] = $clients[$row['client_id']];
-      $row['address'] = $address[$row['address_id']];
+      $row['address'] = $row['address_id'] == -1 ? '' : $address[$row['address_id']];
       $row['operator_id'] = $result_users[$row['operator_id']];
 
       if (isset($result_users[$row['deliveryman']])) {
@@ -164,9 +149,10 @@ class OrderHelper extends \App\Models\OrderModel {
       }
       
       $last_id = 0;
+      $item_ids = [];
       foreach ($row['item_ids'] as $f => $item_id) {
         if ($last_id != $item_id) {
-          $row['item_ids'][$f] = $result_items[$item_id];
+          $item_ids[$item_id] = $result_items[$item_id];
           $last_id = $item_id;
         } else {
           unset($row['item_ids'][$f]);
@@ -174,10 +160,12 @@ class OrderHelper extends \App\Models\OrderModel {
         
         if (!isset($row['item_ids_cnt'][$item_id])) {
           $row['item_ids_cnt'][$item_id] = 0;
+        } else {
+          //unset($row['item_ids'][$f]);
         }
         $row['item_ids_cnt'][$item_id]++;
       }
-      $row['item_ids'] = array_values($row['item_ids']);
+      $row['item_ids'] = array_values($item_ids);
     }
     
     return $result;
@@ -244,9 +232,5 @@ class OrderHelper extends \App\Models\OrderModel {
     }
 
     return ['phone' => array_values($result), 'client' => $clients, 'address' => $address];
-  }
-  
-  public function saveOrder(){
-    
   }
 }
